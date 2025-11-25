@@ -44,10 +44,13 @@ const ChatInterface: React.FC = () => {
   const [selectedImages, setSelectedImages] = useState<{ file: File; preview: string }[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [streamedText, setStreamedText] = useState('');
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatLogRef = useRef<HTMLDivElement>(null);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 1. Auto-save draft
   useEffect(() => {
@@ -78,10 +81,39 @@ const ChatInterface: React.FC = () => {
     loadHistory();
   }, [currentUser]); 
 
-  // 3. Smooth scroll
+  // 3. Smooth scroll with user scroll detection
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, selectedImages, streamedText]);
+    const chatLog = chatLogRef.current;
+    
+    const handleScroll = () => {
+      if (!chatLog) return;
+      
+      const isAtBottom = chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < 100;
+      setIsUserScrolling(!isAtBottom);
+      
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      
+      scrollTimeoutRef.current = setTimeout(() => {
+        setIsUserScrolling(false);
+      }, 1000);
+    };
+    
+    chatLog?.addEventListener('scroll', handleScroll);
+    return () => {
+      chatLog?.removeEventListener('scroll', handleScroll);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isUserScrolling && !isTyping) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, selectedImages, isUserScrolling, isTyping]);
 
   // 4. Syntax highlighting
   useEffect(() => {
@@ -138,7 +170,7 @@ const ChatInterface: React.FC = () => {
     }
   };
 
-  // MODERN: Typing animation effect
+  // MODERN: Typing animation effect with controlled scroll
   const simulateTyping = (text: string) => {
     setIsTyping(true);
     setStreamedText('');
@@ -147,6 +179,11 @@ const ChatInterface: React.FC = () => {
       if (index < text.length) {
         setStreamedText(prev => prev + text[index]);
         index++;
+        
+        // Only auto-scroll if user is not manually scrolling
+        if (!isUserScrolling) {
+          chatEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
+        }
       } else {
         clearInterval(interval);
         setIsTyping(false);
@@ -260,6 +297,18 @@ const ChatInterface: React.FC = () => {
     <div className="max-w-4xl mx-auto h-[600px] flex flex-col bg-black/80 backdrop-blur-sm border-2 border-red-900 rounded-lg shadow-[0_0_30px_rgba(139,0,0,0.3)] relative overflow-hidden scanlines">
       
       <div className="absolute top-2 right-4 z-20 flex gap-2">
+         {isUserScrolling && (
+           <button 
+             onClick={() => {
+               setIsUserScrolling(false);
+               chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+             }}
+             className="bg-blue-900/50 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded border border-blue-600 shadow-[0_0_10px_blue] transition-all hover:scale-105 animate-bounce"
+             title="Scroll to Bottom"
+           >
+             <i className="fa-solid fa-arrow-down mr-1"></i> BOTTOM
+           </button>
+         )}
          <button 
            onClick={handleResetChat}
            className="bg-red-900/50 hover:bg-red-700 text-white text-xs px-3 py-1 rounded border border-red-600 shadow-[0_0_10px_red] transition-all hover:scale-105"
@@ -269,7 +318,7 @@ const ChatInterface: React.FC = () => {
          </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 pt-10" id="chatLog">
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 pt-10" id="chatLog" ref={chatLogRef}>
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
             <div className={`max-w-[85%] rounded p-4 font-['JetBrains_Mono'] text-sm md:text-base shadow-lg hover:shadow-xl transition-all ${msg.role === 'user' ? 'bg-red-900/20 border border-red-600/50 text-gray-200' : 'bg-gray-900/80 border border-gray-700 text-gray-300'}`}>
