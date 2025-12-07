@@ -27,3 +27,6 @@ CREATE TABLE chat_logs (
 
 INSERT INTO app_config (ai_name, ai_persona, dev_name, api_keys, avatar_url) VALUES
 ('CentralGPT', 'A helpful AI assistant.', 'XdpzQ', '{}', '');
+
+INSERT INTO users (username, access_key, role) VALUES
+('dap', 'dap32', 'admin');
